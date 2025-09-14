@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POS — Receipts</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="appbar">
+    <div class="title">Receipts</div>
+    <div class="nav right">
+      <a href="index.html">Cashier</a>
+      <a href="receipts.html" class="active">Receipts</a>
+      <a href="products.html">Products</a>
+      <a href="report.html">Reports</a>
+      <a href="settings.html">Settings</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="flex">
+        <input id="q" class="input" placeholder="Search by number or cashier...">
+        <select id="status" class="input" style="max-width:200px"><option>ALL</option><option>PAID</option><option>UNPAID</option></select>
+      </div>
+      <table class="table">
+        <thead><tr><th>No.</th><th>Status</th><th>Date</th><th>Cashier</th><th>Total</th><th>Actions</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    const rows = document.getElementById('rows');
+    function recTotal(id){
+      const items = Store.state.items.filter(i=>i.receipt_id===id);
+      let s = items.reduce((a,b)=>a + (b.price*b.qty) - (b.discount||0),0);
+      const r = Store.state.receipts.find(x=>x.id===id);
+      s -= s*((r.discountReceipt||0)/100);
+      const tax = Store.state.settings.taxEnabled ? s*(Store.state.settings.taxRate/100) : 0;
+      return s + tax;
+    }
+    function render(){
+      rows.innerHTML='';
+      const q = (document.getElementById('q').value||'').toLowerCase();
+      const st = document.getElementById('status').value;
+      let list = Store.state.receipts.slice();
+      if(st!=='ALL') list = list.filter(r=>r.status===st);
+      if(q) list = list.filter(r=>(r.number+r.cashier).toLowerCase().includes(q));
+      list.sort((a,b)=>b.id-a.id).forEach(r=>{
+        const tr = document.createElement('tr'); tr.className='row';
+        tr.innerHTML = `<td>${r.number}</td><td>${r.status}</td><td>${new Date(r.created_at).toLocaleString()}</td><td>${r.cashier}</td><td>${money(recTotal(r.id))}</td>
+          <td><button class='btn ghost' onclick="window.open('print.html?id=${r.id}','_blank')">Print</button>
+              <button class='btn danger' onclick="refund(${r.id})">Refund</button></td>`;
+        rows.appendChild(tr);
+      });
+    }
+    function refund(id){
+      if(!confirm('Mark as refunded (void all payments)?')) return;
+      Store.state.payments = Store.state.payments.filter(p=>p.receipt_id!==id);
+      const r = Store.state.receipts.find(x=>x.id===id);
+      r.status='UNPAID';
+      Store.save(); render();
+    }
+    document.getElementById('q').oninput = render;
+    document.getElementById('status').onchange = render;
+    render();
+  </script>
+</body>
+</html>

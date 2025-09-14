@@ -1,0 +1,76 @@
+:root{
+  --black: #0B0B0D;
+  --white: #F7F7F9;
+  --gold: #D4AF37;
+  --slate: #70707A;
+  --cyan: #00C2D1;
+  --radius: 10px;
+}
+
+*{box-sizing:border-box}
+body{
+  font-family: "Inter", sans-serif;
+  margin:0;
+  background:var(--white);
+  color:var(--black);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  padding-bottom:72px;
+}
+
+.topbar{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  padding:12px 16px;
+  border-bottom:1px solid rgba(11,11,13,0.06);
+  position:sticky;
+  top:0;background:linear-gradient(180deg, rgba(247,247,249,0.9), rgba(247,247,249,0.85));
+  backdrop-filter: blur(6px);
+}
+
+.brand .logo{font-family:"Montserrat",sans-serif;font-weight:700;color:var(--black);letter-spacing:1px}
+.brand .micro{font-size:12px;color:var(--slate)}
+
+.page{padding:16px}
+.hero{padding:18px 0}
+.hero h1{font-family:"Montserrat",sans-serif;font-size:20px;margin:0 0 6px}
+.subtitle{color:var(--slate);margin:0 0 12px}
+
+.cta-row{display:flex;gap:8px}
+.btn{padding:10px 12px;border-radius:8px;border:none;font-weight:600;cursor:pointer}
+.btn.small{padding:6px 8px;font-size:13px}
+.btn.primary{background:var(--gold);color:var(--black)}
+.btn.ghost{background:transparent;border:1px solid rgba(11,11,13,0.06)}
+
+.categories{display:flex;gap:8px;margin:16px 0}
+.cat{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(11,11,13,0.06);background:linear-gradient(180deg,#fff,#fafafa);text-align:center}
+
+.products{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:12px;
+}
+
+.card{
+  background:#fff;
+  border-radius:var(--radius);
+  padding:0;
+  overflow:hidden;
+  box-shadow:0 8px 30px rgba(11,11,13,0.04);
+}
+
+.card img{width:100%;height:160px;object-fit:cover;display:block}
+.card-body{padding:10px}
+.pname{margin:0 0 6px;font-size:15px}
+.priceRow{display:flex;justify-content:space-between;align-items:center}
+.price{font-weight:700}
+.rating{font-size:12px;color:var(--slate)}
+
+.card-actions{display:flex;gap:8px;margin-top:10px;align-items:center}
+
+.site-footer{position:fixed;left:0;right:0;bottom:0;background:#fff;padding:10px 16px;border-top:1px solid rgba(11,11,13,0.06);display:flex;justify-content:space-between;font-size:13px}
+@media(min-width:900px){
+  .products{grid-template-columns:repeat(4,1fr)}
+  .hero h1{font-size:28px}
+}

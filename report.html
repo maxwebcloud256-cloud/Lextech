@@ -1,0 +1,135 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POS — Weekly Report</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="appbar">
+    <div class="title">Weekly Sales</div>
+    <div class="nav right">
+      <a href="index.html">Cashier</a>
+      <a href="receipts.html">Receipts</a>
+      <a href="products.html">Products</a>
+      <a href="report.html" class="active">Reports</a>
+      <a href="settings.html">Settings</a>
+    </div>
+  </div>
+  <div class="wrap grid" style="grid-template-columns:300px 1fr">
+    <aside class="card">
+      <h3>Report Info</h3>
+      <div class="small">Select Week</div>
+      <input id="week" type="week" class="input">
+      <hr class="sep"/>
+      <div class="kpis">
+        <div class="kpi"><div class="h">Total Sales</div><div id="kpiSales" class="v">0</div></div>
+        <div class="kpi"><div class="h">Cash</div><div id="kpiCash" class="v">0</div></div>
+        <div class="kpi"><div class="h">M-Pesa</div><div id="kpiMpesa" class="v">0</div></div>
+        <div class="kpi"><div class="h">Transactions</div><div id="kpiTx" class="v">0</div></div>
+      </div>
+    </aside>
+    <main class="card">
+      <h3>Daily Breakdown</h3>
+      <div style="overflow:auto; max-height:55vh">
+        <table class="table" style="min-width:800px">
+          <thead><tr><th>Day</th><th>Total Sales</th><th>VAT</th><th>M-Pesa</th><th>Cash</th><th>Transactions</th><th>KGs Sold</th></tr></thead>
+          <tbody id="dailyBody"></tbody>
+        </table>
+      </div>
+      <h3 style="margin-top:14px">Cashiers Performance</h3>
+      <table class="table" style="min-width:800px">
+        <thead><tr><th>Cashier</th><th>Total Sales</th><th>VAT</th><th>M-Pesa</th><th>Cash</th><th>Transactions</th><th>KGs Sold</th></tr></thead>
+        <tbody id="cashierBody"></tbody>
+      </table>
+    </main>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    function startOfISOWeek(d){ const x=new Date(d); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); x.setHours(0,0,0,0); return x; }
+    function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+    function getWeekNumber(d){ const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const dayNum = date.getUTCDay() || 7; date.setUTCDate(date.getUTCDate() + 4 - dayNum); const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1)); return Math.ceil((((date - yearStart) / 86400000) + 1)/7); }
+    const weekInput = document.getElementById('week');
+    const now = new Date(); const weekStr = `${now.getFullYear()}-W${String(getWeekNumber(now)).padStart(2,'0')}`; weekInput.value = weekStr;
+
+    function currency(n){ return money(n); }
+
+    function refresh(){
+      const [y, wk] = weekInput.value.split('-W');
+      const year = parseInt(y,10), w = parseInt(wk,10);
+      const jan4 = new Date(year,0,4);
+      const weekStart = startOfISOWeek(addDays(jan4, (w-1)*7));
+      const weekEnd = addDays(weekStart, 7);
+
+      const rows = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].map((name,i)=>({name,total:0,vat:0,mpesa:0,cash:0,tx:0,kgs:0, idx:i}));
+
+      const paidSet = new Set(Store.state.payments.filter(p=>{
+        const dt = new Date(p.created_at);
+        return dt>=weekStart && dt<weekEnd;
+      }).map(p=>p.receipt_id));
+
+      const kgMap = {};
+      Store.state.items.filter(it=>paidSet.has(it.receipt_id)).forEach(it=>{
+        if(it.unit.toLowerCase()==='kg'){ kgMap[it.receipt_id]=(kgMap[it.receipt_id]||0)+parseFloat(it.qty||0); }
+      });
+
+      const cashierAgg = {};
+
+      Store.state.payments.forEach(p=>{
+        const dt = new Date(p.created_at);
+        if(!(dt>=weekStart && dt<weekEnd)) return;
+        const dayIdx = (dt.getDay()+6)%7;
+        const r = Store.state.receipts.find(x=>x.id===p.receipt_id);
+        // compute total of receipt at that time (approx using current settings)
+        const items = Store.state.items.filter(i=>i.receipt_id===r.id);
+        let s = items.reduce((a,b)=>a + (b.price*b.qty) - (b.discount||0),0);
+        s -= s*((r.discountReceipt||0)/100);
+        const vat = Store.state.settings.taxEnabled ? s*(Store.state.settings.taxRate/100) : 0;
+        const grand = s + vat;
+
+        rows[dayIdx].total += grand;
+        rows[dayIdx].tx += 1;
+        rows[dayIdx].kgs += (kgMap[r.id]||0);
+        if(p.method==='cash') rows[dayIdx].cash += p.amount;
+        if(p.method==='mpesa') rows[dayIdx].mpesa += p.amount;
+        rows[dayIdx].vat += vat;
+
+        const name = r.cashier;
+        if(!cashierAgg[name]) cashierAgg[name]={total:0,vat:0,mpesa:0,cash:0,tx:0,kgs:0};
+        cashierAgg[name].total += grand;
+        cashierAgg[name].tx += 1;
+        cashierAgg[name].kgs += (kgMap[r.id]||0);
+        cashierAgg[name].vat += vat;
+        if(p.method==='cash') cashierAgg[name].cash += p.amount;
+        if(p.method==='mpesa') cashierAgg[name].mpesa += p.amount;
+      });
+
+      // render
+      const dailyBody = document.getElementById('dailyBody');
+      dailyBody.innerHTML='';
+      rows.forEach(r=>{
+        const tr = document.createElement('tr'); tr.className='row';
+        tr.innerHTML = `<td>${r.name}</td><td>${currency(r.total)}</td><td>${currency(r.vat)}</td><td>${currency(r.mpesa)}</td><td>${currency(r.cash)}</td><td>${r.tx}</td><td>${r.kgs}</td>`;
+        dailyBody.appendChild(tr);
+      });
+
+      document.getElementById('kpiSales').textContent = currency(rows.reduce((a,b)=>a+b.total,0));
+      document.getElementById('kpiCash').textContent = currency(rows.reduce((a,b)=>a+b.cash,0));
+      document.getElementById('kpiMpesa').textContent = currency(rows.reduce((a,b)=>a+b.mpesa,0));
+      document.getElementById('kpiTx').textContent = rows.reduce((a,b)=>a+b.tx,0);
+
+      const cashierBody = document.getElementById('cashierBody');
+      cashierBody.innerHTML='';
+      Object.entries(cashierAgg).forEach(([name,val])=>{
+        const tr = document.createElement('tr'); tr.className='row';
+        tr.innerHTML = `<td>${name}</td><td>${currency(val.total)}</td><td>${currency(val.vat)}</td><td>${currency(val.mpesa)}</td><td>${currency(val.cash)}</td><td>${val.tx}</td><td>${val.kgs}</td>`;
+        cashierBody.appendChild(tr);
+      });
+    }
+
+    weekInput.onchange = refresh;
+    refresh();
+  </script>
+</body>
+</html>

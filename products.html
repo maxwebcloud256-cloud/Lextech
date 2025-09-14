@@ -1,0 +1,78 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POS — Products</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="appbar">
+    <div class="title">Products</div>
+    <div class="nav right">
+      <a href="index.html">Cashier</a>
+      <a href="receipts.html">Receipts</a>
+      <a href="products.html" class="active">Products</a>
+      <a href="report.html">Reports</a>
+      <a href="settings.html">Settings</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="flex" style="margin-bottom:8px">
+        <input id="name" class="input" placeholder="Product name">
+        <input id="unit" class="input" placeholder="Unit (plate/kg/piece)">
+        <input id="price" class="input" type="number" step="0.01" placeholder="Price">
+        <select id="dept" class="input">
+          <option value="1">Butchery</option><option value="2">Kitchen</option>
+        </select>
+        <button id="create" class="btn brand">Add</button>
+      </div>
+      <table class="table">
+        <thead><tr><th>Name</th><th>Unit</th><th>Price</th><th>Dept</th><th>Active</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    const rows = document.getElementById('rows');
+    function render(){
+      rows.innerHTML='';
+      Store.state.products.forEach(p=>{
+        const tr = document.createElement('tr'); tr.className='row';
+        tr.innerHTML = `<td><input class='input' data-f='name' data-id='${p.id}' value="${p.name}"></td>
+          <td><input class='input' data-f='unit' data-id='${p.id}' value="${p.unit}"></td>
+          <td><input class='input' data-f='price' data-id='${p.id}' type="number" step="0.01" value="${p.price}"></td>
+          <td>${p.department_id==1?'Butchery':'Kitchen'}</td>
+          <td><input type="checkbox" data-f='active' data-id='${p.id}' ${p.active?'checked':''}></td>
+          <td><button class='btn danger' onclick='del(${p.id})'>Delete</button></td>`;
+        rows.appendChild(tr);
+      });
+    }
+    rows.oninput = (e)=>{
+      const id = parseInt(e.target.dataset.id,10);
+      const f = e.target.dataset.f;
+      const p = Store.state.products.find(x=>x.id===id);
+      if(f==='active') p.active = e.target.checked;
+      else if(f==='price') p.price = parseFloat(e.target.value||0);
+      else p[f] = e.target.value;
+      Store.save();
+    };
+    function del(id){
+      if(!confirm('Delete product?'))return;
+      Store.state.products = Store.state.products.filter(p=>p.id!==id);
+      Store.save(); render();
+    }
+    document.getElementById('create').onclick = ()=>{
+      const p = {id:Store.uid(), name:name.value.trim(), unit:unit.value.trim()||'piece', price:parseFloat(price.value||0), department_id:parseInt(dept.value,10), active:true};
+      if(!p.name){ alert('Name required'); return;}
+      Store.state.products.push(p); Store.save(); render();
+      name.value=''; unit.value=''; price.value='';
+      // update product selects in cashier if open
+      try{ populateProducts(); }catch(e){}
+    };
+    render();
+  </script>
+</body>
+</html>

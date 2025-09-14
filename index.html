@@ -1,0 +1,307 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POS — Cashier</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="appbar no-print">
+    <div class="title">POS — Cashier</div>
+    <div class="nav right">
+      <a href="index.html" class="active">Cashier</a>
+      <a href="receipts.html">Receipts</a>
+      <a href="products.html">Products</a>
+      <a href="report.html">Reports</a>
+      <a href="settings.html">Settings</a>
+    </div>
+  </div>
+  <div class="wrap cashier-layout">
+    <aside class="card sidebar no-print">
+      <div class="flex">
+        <input id="search" class="input" placeholder="Search receipts..."/>
+        <button id="new" class="btn brand">New</button>
+      </div>
+      <div class="flex" style="margin:8px 0">
+        <button class="btn ghost" data-filter="ALL">All</button>
+        <button class="btn ghost" data-filter="UNPAID">Unpaid</button>
+        <button class="btn ghost" data-filter="PAID">Paid</button>
+      </div>
+      <div id="list" class="grid"></div>
+    </aside>
+
+    <main class="grid">
+      <section class="card">
+        <div class="flex">
+          <h3>Receipt <span id="rnum">—</span></h3>
+          <div class="right small">Cashier: <span id="cashier">—</span></div>
+        </div>
+        <table class="table">
+          <thead>
+            <tr><th>Product</th><th>Unit</th><th>Price</th><th>Qty</th><th>Discount</th><th>Line Total</th><th></th></tr>
+          </thead>
+          <tbody id="items"></tbody>
+        </table>
+        <hr class="sep"/>
+        <div class="flex">
+          <select id="product"></select>
+          <input id="qty" type="number" class="input" step="0.001" min="0.001" value="1" style="width:120px">
+          <input id="disc" type="number" class="input" step="0.01" min="0" value="0" style="width:120px" placeholder="Line discount">
+          <button id="add" class="btn ghost">Add Item</button>
+        </div>
+      </section>
+
+      <div class="total-banner">Total: <span id="grand">0.00</span></div>
+
+      <section class="card">
+        <h3>Payment</h3>
+        <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+          <div>
+            <div class="small">Method A</div>
+            <select id="methodA">
+              <option value="cash">Cash</option>
+              <option value="mpesa">M-Pesa</option>
+            </select>
+            <input id="amountA" class="input" type="number" step="0.01" placeholder="Amount">
+            <input id="refA" class="input" placeholder="Ref / Txn ID (optional)">
+          </div>
+          <div>
+            <div class="small">Method B (optional)</div>
+            <select id="methodB">
+              <option value="">None</option>
+              <option value="cash">Cash</option>
+              <option value="mpesa">M-Pesa</option>
+            </select>
+            <input id="amountB" class="input" type="number" step="0.01" placeholder="Amount">
+            <input id="refB" class="input" placeholder="Ref / Txn ID (optional)">
+          </div>
+          <div>
+            <div class="small">Receipt Discount (%)</div>
+            <input id="receiptDisc" class="input" type="number" step="0.01" min="0" max="100" value="0">
+            <div class="small">Tax (VAT) <input id="taxEnabled" type="checkbox"> Enable</div>
+            <input id="taxRate" class="input" type="number" step="0.01" min="0" value="0" placeholder="Tax %">
+            <div class="small">Change</div>
+            <div id="change" class="input">0.00</div>
+          </div>
+        </div>
+        <div class="flex" style="margin-top:12px">
+          <button id="process" class="btn brand">Process Payment</button>
+          <button id="print" class="btn ghost">Print</button>
+          <button id="void" class="btn danger">Void</button>
+          <div class="right flex">
+            <button id="export" class="btn ghost">Backup</button>
+            <label class="btn ghost">Restore<input id="import" type="file" class="hide" accept=".json"></label>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    const listEl = document.getElementById('list');
+    const searchEl = document.getElementById('search');
+    const newBtn = document.getElementById('new');
+    const itemsT = document.getElementById('items');
+    const productSel = document.getElementById('product');
+    const qtyEl = document.getElementById('qty');
+    const discEl = document.getElementById('disc');
+    const rnumEl = document.getElementById('rnum');
+    const cashierEl = document.getElementById('cashier');
+    const grandEl = document.getElementById('grand');
+    const methodA = document.getElementById('methodA');
+    const amountA = document.getElementById('amountA');
+    const refA = document.getElementById('refA');
+    const methodB = document.getElementById('methodB');
+    const amountB = document.getElementById('amountB');
+    const refB = document.getElementById('refB');
+    const rDisc = document.getElementById('receiptDisc');
+    const taxEnabled = document.getElementById('taxEnabled');
+    const taxRate = document.getElementById('taxRate');
+    const changeEl = document.getElementById('change');
+
+    // load settings
+    cashierEl.textContent = Store.state.settings.cashier;
+    taxEnabled.checked = Store.state.settings.taxEnabled;
+    taxRate.value = Store.state.settings.taxRate;
+
+    function populateProducts(){
+      productSel.innerHTML='';
+      Store.state.products.filter(p=>p.active).forEach(p=>{
+        const opt = document.createElement('option');
+        opt.value = p.id; opt.textContent = `${p.name} — ${money(p.price)}/${p.unit}`;
+        productSel.appendChild(opt);
+      });
+    }
+    populateProducts();
+
+    function subtotal(rid){
+      return Store.state.items.filter(i=>i.receipt_id===rid)
+        .reduce((a,b)=> a + (b.price*b.qty) - (b.discount||0), 0);
+    }
+
+    function totals(rid){
+      const s = subtotal(rid);
+      const r = Store.state.receipts.find(x=>x.id===rid);
+      const disc = s * ((r.discountReceipt||0)/100);
+      const taxable = s - disc;
+      const tax = taxEnabled.checked ? taxable * (parseFloat(taxRate.value||0)/100) : 0;
+      const grand = taxable + tax;
+      return {s, disc, tax, grand};
+    }
+
+    function renderReceipts(filter='ALL', q=''){
+      listEl.innerHTML='';
+      let list = Store.state.receipts;
+      if(filter !== 'ALL') list = list.filter(r=>r.status===filter);
+      if(q){ const qq = q.toLowerCase(); list = list.filter(r => (r.number + ' ' + (r.customer||'')).toLowerCase().includes(qq)); }
+      list.sort((a,b)=>b.id-a.id).forEach(r=>{
+        const card = document.createElement('div');
+        const t = totals(r.id).grand;
+        card.className='receipt-card';
+        card.innerHTML = `<div>
+          <div><strong>Receipt ${Store.state.settings.receiptPrefix}${r.number}</strong></div>
+          <div class="small">${new Date(r.created_at).toDateString()} • ${r.cashier}</div>
+        </div>
+        <div style="text-align:right">
+          <div class="amount">${money(t)}</div>
+          <div><span class="badge ${r.status==='PAID'?'paid':'unpaid'}">${r.status}</span></div>
+        </div>`;
+        card.onclick = ()=> openReceipt(r.id);
+        listEl.appendChild(card);
+      });
+    }
+
+    let activeId = null;
+    function openReceipt(id){
+      activeId = id;
+      const r = Store.state.receipts.find(x=>x.id===id);
+      rnumEl.textContent = r.number;
+      rDisc.value = r.discountReceipt||0;
+      renderItems();
+      computeChange();
+    }
+
+    function renderItems(){
+      itemsT.innerHTML='';
+      Store.state.items.filter(i=>i.receipt_id===activeId).forEach(it=>{
+        const tr = document.createElement('tr'); tr.className='row';
+        tr.innerHTML = `<td>${it.name}</td><td>${it.unit}</td><td>${it.price.toFixed(2)}</td>
+          <td><input data-id="${it.id}" class="input qty" type="number" step="0.001" min="0.001" value="${it.qty}"></td>
+          <td><input data-id="${it.id}" class="input disc" type="number" step="0.01" min="0" value="${it.discount||0}"></td>
+          <td>${(it.price*it.qty - (it.discount||0)).toFixed(2)}</td>
+          <td><button class="btn danger" data-del="${it.id}">×</button></td>`;
+        itemsT.appendChild(tr);
+      });
+      grandEl.textContent = money(totals(activeId).grand);
+    }
+
+    function addItem(){
+      if(activeId==null){ alert('Create a receipt first'); return; }
+      const p = Store.state.products.find(x=>x.id==productSel.value);
+      Store.state.items.push({id:Store.uid(), receipt_id:activeId, product_id:p.id, name:p.name, unit:p.unit, price:p.price, qty:parseFloat(qtyEl.value||1), discount:parseFloat(discEl.value||0)});
+      Store.save(); renderItems(); computeChange();
+    }
+
+    // events
+    document.querySelectorAll('[data-filter]').forEach(b=> b.onclick = ()=> renderReceipts(b.dataset.filter, searchEl.value));
+    searchEl.oninput = ()=> renderReceipts('ALL', searchEl.value);
+    newBtn.onclick = ()=>{
+      const id = Store.uid();
+      const number = (id % 100000).toString().padStart(5,'0');
+      Store.state.receipts.push({id, number, status:'UNPAID', customer:'Walk-in Customer', cashier:Store.state.settings.cashier, created_at:Store.now(), discountReceipt:0});
+      Store.save();
+      renderReceipts();
+      openReceipt(id);
+    };
+    document.getElementById('add').onclick = addItem;
+    itemsT.oninput = (e)=>{
+      const id = parseInt(e.target.dataset.id,10);
+      const it = Store.state.items.find(x=>x.id===id);
+      if(e.target.classList.contains('qty')) it.qty = Math.max(0.001, parseFloat(e.target.value||1));
+      if(e.target.classList.contains('disc')) it.discount = Math.max(0, parseFloat(e.target.value||0));
+      Store.save(); renderItems(); computeChange();
+    };
+    itemsT.onclick = (e)=>{
+      if(e.target.dataset.del){
+        const id = parseInt(e.target.dataset.del,10);
+        Store.state.items = Store.state.items.filter(x=>x.id!==id);
+        Store.save(); renderItems(); computeChange();
+      }
+    };
+    rDisc.oninput = ()=>{
+      const r = Store.state.receipts.find(x=>x.id===activeId);
+      r.discountReceipt = Math.max(0, parseFloat(rDisc.value||0));
+      Store.save(); renderItems(); computeChange();
+    };
+    taxEnabled.onchange = ()=> computeChange();
+    taxRate.oninput = ()=> computeChange();
+
+    function computeChange(){
+      const t = totals(activeId).grand;
+      const a = parseFloat(amountA.value||0) + parseFloat(amountB.value||0);
+      const change = Math.max(0, a - t);
+      changeEl.textContent = money(change);
+      grandEl.textContent = money(t);
+    }
+
+    [amountA, amountB].forEach(x=> x.oninput = computeChange);
+    [methodA, methodB].forEach(x=> x.onchange = computeChange);
+
+    document.getElementById('process').onclick = ()=>{
+      if(activeId==null) return;
+      const t = totals(activeId).grand;
+      const a = parseFloat(amountA.value||0) + parseFloat(amountB.value||0);
+      if(a < t){ alert('Amount is less than total'); return; }
+      const r = Store.state.receipts.find(x=>x.id===activeId);
+      const parts = [];
+      if(parseFloat(amountA.value||0) > 0) parts.push({method:methodA.value, amount:parseFloat(amountA.value||0), ref:refA.value});
+      if(methodB.value && parseFloat(amountB.value||0) > 0) parts.push({method:methodB.value, amount:parseFloat(amountB.value||0), ref:refB.value});
+      parts.forEach(p=> Store.state.payments.push({id:Store.uid(), receipt_id:r.id, method:p.method, amount:p.amount, tendered:p.amount, change_due:0, ref:p.ref, created_at:Store.now()}));
+      r.status = 'PAID';
+      Store.save();
+      alert('Payment recorded');
+      renderReceipts();
+      computeChange();
+    };
+
+    document.getElementById('print').onclick = ()=>{
+      if(activeId==null) return;
+      const url = `print.html?id=${activeId}`;
+      window.open(url, '_blank');
+    };
+
+    document.getElementById('void').onclick = ()=>{
+      if(activeId==null) return;
+      if(!confirm('Void this receipt?')) return;
+      // remove items & payments, mark as UNPAID
+      Store.state.items = Store.state.items.filter(i=>i.receipt_id!==activeId);
+      Store.state.payments = Store.state.payments.filter(p=>p.receipt_id!==activeId);
+      const r = Store.state.receipts.find(x=>x.id===activeId);
+      r.status = 'UNPAID'; r.discountReceipt = 0;
+      Store.save(); renderItems(); renderReceipts();
+    };
+
+    document.getElementById('export').onclick = exportJSON;
+    document.getElementById('import').onchange = (e)=> importJSON(e.target.files[0], ok=> ok && location.reload());
+
+    // Seed default receipt if none
+    if(Store.state.receipts.length===0){
+      const id = Store.uid(); const number = '00030';
+      Store.state.receipts.push({id, number, status:'UNPAID', customer:'Walk-in Customer', cashier:Store.state.settings.cashier, created_at:Store.now(), discountReceipt:0});
+      const p = Store.state.products[0];
+      Store.state.items.push({id:Store.uid(), receipt_id:id, product_id:p.id, name:p.name, unit:p.unit, price:p.price, qty:1, discount:0});
+      Store.save();
+    }
+    renderReceipts(); openReceipt(Store.state.receipts[Store.state.receipts.length-1].id);
+
+    // Shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if(e.altKey && e.key==='n'){ newBtn.click(); }
+      if(e.altKey && e.key==='+'){ document.getElementById('add').click(); }
+      if(e.altKey && e.key==='p'){ document.getElementById('process').click(); }
+    });
+  </script>
+</body>
+</html>

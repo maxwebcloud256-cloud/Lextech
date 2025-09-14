@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>POS — Settings</title>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+  <div class="appbar">
+    <div class="title">Settings</div>
+    <div class="nav right">
+      <a href="index.html">Cashier</a>
+      <a href="receipts.html">Receipts</a>
+      <a href="products.html">Products</a>
+      <a href="report.html">Reports</a>
+      <a href="settings.html" class="active">Settings</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <h3>Store</h3>
+      <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+        <div><div class="small">Store Name</div><input id="store" class="input"></div>
+        <div><div class="small">Currency</div><input id="currency" class="input" placeholder="KSh"></div>
+        <div><div class="small">Receipt Prefix</div><input id="prefix" class="input" placeholder="#"></div>
+        <div><div class="small">Cashier (display name)</div><input id="cashier" class="input"></div>
+        <div><div class="small">Tax Enabled</div><input id="taxEnabled" type="checkbox"></div>
+        <div><div class="small">Tax Rate %</div><input id="taxRate" class="input" type="number" step="0.01"></div>
+      </div>
+      <div class="flex" style="margin-top:12px">
+        <button id="save" class="btn brand">Save</button>
+        <button id="backup" class="btn ghost">Backup</button>
+        <label class="btn ghost">Restore<input id="restore" type="file" class="hide" accept=".json"></label>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+  <script>
+    const s = Store.state.settings;
+    document.getElementById('store').value = s.store;
+    document.getElementById('currency').value = s.currency;
+    document.getElementById('prefix').value = s.receiptPrefix;
+    document.getElementById('cashier').value = s.cashier;
+    document.getElementById('taxEnabled').checked = s.taxEnabled;
+    document.getElementById('taxRate').value = s.taxRate;
+
+    document.getElementById('save').onclick = ()=>{
+      const s2 = Store.state.settings;
+      s2.store = document.getElementById('store').value||s2.store;
+      s2.currency = document.getElementById('currency').value||s2.currency;
+      s2.receiptPrefix = document.getElementById('prefix').value||s2.receiptPrefix;
+      s2.cashier = document.getElementById('cashier').value||s2.cashier;
+      s2.taxEnabled = document.getElementById('taxEnabled').checked;
+      s2.taxRate = parseFloat(document.getElementById('taxRate').value||0);
+      Store.save();
+      alert('Saved');
+    };
+    document.getElementById('backup').onclick = exportJSON;
+    document.getElementById('restore').onchange = e=> importJSON(e.target.files[0], ok=> ok && location.reload());
+  </script>
+</body>
+</html>
